@@ -200,6 +200,7 @@ h1 .spd { color: var(--accent); }
     </div>
     <div class="save-row">
       <button class="btn primary" id="saveBtn">Save my list</button>
+      <button class="btn" id="imgBtn">Download list image / โหลดรูปลิสต์</button>
       <span class="save-state" id="saveState">Not saved yet</span>
       <span class="muted" id="myCounts"></span>
     </div>
@@ -741,6 +742,64 @@ function applyMe(d) {
 try { const raw = localStorage.getItem("plli-me"); if (raw) applyMe(JSON.parse(raw)); } catch {}
 try { const v = localStorage.getItem("plli-ver"); if (VERSIONS.some(x => x.id === v)) state.verFilter = v; } catch {}
 renderVerChips(); renderCountryChips(); renderChips(); renderAll();
+
+
+// ---- Download have/want list as a PNG ----
+function loadImg(src) { return new Promise(res => { const i = new Image(); i.onload = () => res(i); i.onerror = () => res(null); i.src = src; }); }
+function roundRect(ctx, x, y, w, h, r) { ctx.beginPath(); ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r); ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath(); }
+async function makeListImage() {
+  const css = getComputedStyle(document.documentElement), v = n => css.getPropertyValue(n).trim();
+  const me = state.me, W = 1080, P = 48, COLS = 5, GAP = 16, CW = (W - P * 2 - GAP * (COLS - 1)) / COLS, CH = CW * 85 / 55, LH = 64;
+  const rows = ids => Math.max(1, Math.ceil(ids.length / COLS));
+  const sec = ids => 70 + rows(ids) * (CH + LH + GAP);
+  const H = P + 230 + sec(me.have) + 30 + sec(me.want) + 80;
+  const cv = document.createElement("canvas"); cv.width = W; cv.height = H;
+  const ctx = cv.getContext("2d");
+  try { await document.fonts.ready; } catch {}
+  const disp = "italic 900 64px Saira, Arial Narrow, sans-serif", body = "500 26px 'IBM Plex Sans', system-ui, sans-serif";
+  ctx.fillStyle = "#0e0e10"; ctx.fillRect(0, 0, W, H);
+  ctx.fillStyle = "#f4f4f6"; ctx.font = disp; ctx.fillText("PLLI HYPERDRIVE ", P, P + 56);
+  const tw = ctx.measureText("PLLI HYPERDRIVE ").width; ctx.fillStyle = "#ff2e5b"; ctx.fillText("SWAP", P + tw, P + 56);
+  for (let x = 0; x < W - P * 2; x += 14) for (let y = 0; y < 2; y++) if (((x / 14) + y) % 2 === 0) { ctx.fillStyle = "rgba(244,244,246," + (1 - x / (W * 1.1)) + ")"; ctx.fillRect(P + x, P + 80 + y * 14, 14, 14); }
+  ctx.fillStyle = "#f4f4f6"; ctx.font = "700 34px 'IBM Plex Sans', system-ui, sans-serif";
+  ctx.fillText((me.nick || "PLLI") + (me.loc ? "  ·  " + me.loc : ""), P, P + 155);
+  ctx.fillStyle = "#9a9aa6"; ctx.font = body; ctx.fillText(me.contact || "", P, P + 190);
+  let y = P + 230;
+  for (const [title, ids, color] of [["HAVE / มี", me.have, "#3ddc97"], ["WANT / ตามหา", me.want, "#ffb020"]]) {
+    ctx.fillStyle = color; ctx.font = "italic 800 38px Saira, Arial Narrow, sans-serif"; ctx.fillText(title + "  (" + ids.length + ")", P, y + 40);
+    y += 70;
+    if (!ids.length) { ctx.fillStyle = "#9a9aa6"; ctx.font = body; ctx.fillText("—", P, y + 30); }
+    for (let n = 0; n < ids.length; n++) {
+      const id = ids[n], c = CARD[id], x = P + (n % COLS) * (CW + GAP), yy = y + Math.floor(n / COLS) * (CH + LH + GAP);
+      ctx.save(); roundRect(ctx, x, yy, CW, CH, 12); ctx.clip();
+      const img = IMGS[id] ? await loadImg(IMGS[id]) : null;
+      if (img) { const sc = Math.max(CW / img.width, CH / img.height); ctx.drawImage(img, x + (CW - img.width * sc) / 2, yy + (CH - img.height * sc) / 2, img.width * sc, img.height * sc); }
+      else { const mc = c.member.color.match(/var\((.+)\)/); ctx.fillStyle = mc ? v(mc[1]) : "#5d6b7e"; ctx.fillRect(x, yy, CW, CH); ctx.fillStyle = "rgba(255,255,255,.9)"; ctx.font = "italic 900 54px Saira, sans-serif"; ctx.textAlign = "center"; ctx.fillText(c.member.ini || "", x + CW / 2, yy + CH / 2 + 18); ctx.textAlign = "left"; }
+      ctx.restore();
+      ctx.strokeStyle = color; ctx.lineWidth = 4; roundRect(ctx, x, yy, CW, CH, 12); ctx.stroke();
+      const q = qtyOf(me, id);
+      if (q > 1) { ctx.fillStyle = color; roundRect(ctx, x + CW - 62, yy + 10, 52, 34, 8); ctx.fill(); ctx.fillStyle = "#0e0e10"; ctx.font = "700 24px 'IBM Plex Mono', monospace"; ctx.fillText("×" + q, x + CW - 54, yy + 35); }
+      ctx.fillStyle = "#f4f4f6"; ctx.font = "600 21px 'IBM Plex Sans', system-ui, sans-serif"; ctx.fillText(c.member.name, x + 2, yy + CH + 26, CW - 4);
+      ctx.fillStyle = "#9a9aa6"; ctx.font = "400 18px 'IBM Plex Sans', system-ui, sans-serif"; ctx.fillText(c.set.name, x + 2, yy + CH + 50, CW - 4);
+    }
+    y += rows(ids) * (CH + LH + GAP) + 30;
+  }
+  ctx.fillStyle = "#9a9aa6"; ctx.font = "400 20px 'IBM Plex Sans', system-ui, sans-serif"; ctx.fillText("wallyrubywal.github.io/plli-card-swap", P, H - 34);
+  return cv;
+}
+$("imgBtn").addEventListener("click", async () => {
+  const btn = $("imgBtn"), old = btn.textContent;
+  if (!state.me.have.length && !state.me.want.length) { setSaveState("Mark some cards first / เลือกการ์ดก่อน"); return; }
+  btn.disabled = true; btn.textContent = "Making image…";
+  try {
+    const cv = await makeListImage();
+    const blob = await new Promise(r => cv.toBlob(r, "image/png"));
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a"); a.href = url; a.download = "plli-hyperdrive-" + (state.me.nick || "list").replace(/[^\w-]+/g, "_") + ".png";
+    document.body.append(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 5000);
+  } catch (e) { setSaveState("Could not make the image. Try again."); }
+  btn.disabled = false; btn.textContent = old;
+});
 
 // ---- Supabase: login + shared list ----
 const sb = window.supabase && window.PLLI_CONFIG && window.PLLI_CONFIG.SUPABASE_URL ? window.supabase.createClient(window.PLLI_CONFIG.SUPABASE_URL, window.PLLI_CONFIG.SUPABASE_ANON_KEY) : null;
