@@ -569,7 +569,12 @@ function renderTraders() {
   const box = $("traders"); box.replaceChildren();
   const list = tradersAll();
   $("traderCount").textContent = list.length;
-  if (!list.length) box.append(el("div", { class: "empty" }, "No other PLLI have listed cards yet."));
+  if (state.uid && (state.me.have.length || state.me.want.length)) {
+    const mine = traderCard({ ...state.me, id: state.uid }, null, "list");
+    mine.querySelector(".chips").append(el("span", { class: "pill mutual" }, "You"));
+    box.append(mine);
+  }
+  if (!list.length) box.append(el("div", { class: "empty" }, "No other PLLI have listed cards yet. Share the link so others can add theirs."));
   for (const t of list) box.append(traderCard(t, null, "list"));
 }
 
