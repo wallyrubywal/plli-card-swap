@@ -160,6 +160,7 @@ h1 .spd { color: var(--accent); }
 .tag, .stepper button { color: #0e0e10; }
 .tag.have { background: var(--have); } .tag.want { background: var(--want); }
 .stepper button { background: var(--have); border-color: var(--have); }
+.stepper.want button { background: var(--want); border-color: var(--want); }
 .who { font-style: italic; font-weight: 800; }
 .match.mutual { border-color: var(--accent); box-shadow: 0 0 22px -10px var(--accent); }
 .st.completed { color: #0e0e10; }
@@ -205,7 +206,7 @@ h1 .spd { color: var(--accent); }
   <section id="view-binder" class="list">
     <div class="toolbar">
       <div class="list" style="gap:8px"><div class="chips" id="verChips"></div><div class="chips" id="countryChips"></div><div class="chips" id="memberChips"></div></div>
-      <div class="legend"><span>Tap a card: once = <b style="color:var(--have)">have</b>, twice = <b style="color:var(--want)">want</b>, three times = clear. Use − and + to set how many copies you have.</span></div>
+      <div class="legend"><span>Tap a card: once = <b style="color:var(--have)">have</b>, twice = <b style="color:var(--want)">want</b>, three times = clear. Use − and + to set how many copies you have or want.</span></div>
     </div>
     <div id="binder" class="list"></div>
   </section>
@@ -292,7 +293,7 @@ const state = {
 try { const v = localStorage.getItem("plli-showExamples"); if (v !== null) state.showExamples = v === "1"; } catch {}
 $("showExamples").checked = state.showExamples;
 
-const qtyOf = (t, id) => t.have.includes(id) ? Math.max(1, (t.qty && t.qty[id]) || 1) : 0;
+const qtyOf = (t, id) => t.have.includes(id) || t.want.includes(id) ? Math.max(1, (t.qty && t.qty[id]) || 1) : 0;
 function cardState(id) {
   if (state.me.have.includes(id)) return "have";
   if (state.me.want.includes(id)) return "want";
@@ -399,7 +400,11 @@ function markReceived(t) {
     const q = qtyOf(state.me, id);
     if (q > 1) setQty(id, q - 1, true); else { state.me.have = state.me.have.filter(x => x !== id); delete state.me.qty[id]; }
   }
-  state.me.want = state.me.want.filter(id => !t.iGet.includes(id));
+  for (const id of t.iGet) {
+    if (!state.me.want.includes(id)) continue;
+    const q = qtyOf(state.me, id);
+    if (q > 1) setQty(id, q - 1, true); else { state.me.want = state.me.want.filter(x => x !== id); delete state.me.qty[id]; }
+  }
   if (t.example) { const o = personById(t.otherId); if (o) { if (t.mine) o.replies[t.tid].done = true; else o.offers[t.tid].done = true; } }
   renderAll(); autoSave();
 }
@@ -435,14 +440,14 @@ function renderBinder() {
     for (const c of cards) {
       const s = c.set;
       const st = cardState(c.id), q = qtyOf(state.me, c.id);
-      const label = `${c.member.name}, ${s.name}${st ? ", marked " + st : ""}${st === "have" ? ", " + q + (q > 1 ? " copies" : " copy") : ""}`;
+      const label = `${c.member.name}, ${s.name}${st ? ", marked " + st : ""}${st ? ", " + q + (q > 1 ? " copies" : " copy") : ""}`;
       grid.append(el("div", { class: "pc", "data-state": st },
         el("button", { class: "pc-main", "aria-label": label, onclick: () => cycle(c.id) },
           cardArt(c), el("span", { class: "nm" }, c.group === EXTRA || g.store ? c.member.name : s.name)),
-        st === "have" ? el("div", { class: "stepper" },
-          el("button", { "aria-label": `One fewer copy of ${c.member.name} ${s.name}`, disabled: q <= 1, onclick: () => setQty(c.id, q - 1) }, "−"),
+        st ? el("div", { class: "stepper " + st },
+          el("button", { "aria-label": `One fewer ${st === "want" ? "wanted " : ""}copy of ${c.member.name} ${s.name}`, disabled: q <= 1, onclick: () => setQty(c.id, q - 1) }, "−"),
           el("span", { class: "qty" }, "×" + q),
-          el("button", { "aria-label": `One more copy of ${c.member.name} ${s.name}`, disabled: q >= MAX_QTY, onclick: () => setQty(c.id, q + 1) }, "+")) : null,
+          el("button", { "aria-label": `One more ${st === "want" ? "wanted " : ""}copy of ${c.member.name} ${s.name}`, disabled: q >= MAX_QTY, onclick: () => setQty(c.id, q + 1) }, "+")) : null,
         st ? el("span", { class: "tag " + st }, st) : null,
         pend.has(c.id) ? el("span", { class: "pend" }, "in trade") : null));
     }
@@ -545,7 +550,7 @@ function traderCard(t, s, mode) {
           el("div", {}, el("h4", {}, `You give (${s.iGive.length})`), miniList(s.iGive, state.me)))
       : el("div", { class: "swap" },
           el("div", {}, el("h4", {}, `Has (${t.have.length})`), miniList(t.have, t)),
-          el("div", {}, el("h4", {}, `Wants (${t.want.length})`), miniList(t.want))),
+          el("div", {}, el("h4", {}, `Wants (${t.want.length})`), miniList(t.want, t))),
     contactRow(t), actions);
 }
 
@@ -677,7 +682,7 @@ function normalize(d) {
   const str = (v, n) => typeof v === "string" ? v.slice(0, n) : "";
   const have = arr(d.have);
   const qty = {};
-  if (d.qty && typeof d.qty === "object") for (const id of have) { const n = Math.floor(Number(d.qty[id])); if (n > 1) qty[id] = Math.min(MAX_QTY, n); }
+  if (d.qty && typeof d.qty === "object") for (const id of [...have, ...arr(d.want)]) { const n = Math.floor(Number(d.qty[id])); if (n > 1) qty[id] = Math.min(MAX_QTY, n); }
   const offers = {}, replies = {};
   if (d.offers && typeof d.offers === "object") for (const [k, o] of Object.entries(d.offers).slice(0, 300)) {
     if (o && typeof o.to === "string") offers[k] = { to: o.to, give: arr(o.give), get: arr(o.get), status: o.status === "cancelled" ? "cancelled" : "open", done: !!o.done, at: str(o.at, 40) };
