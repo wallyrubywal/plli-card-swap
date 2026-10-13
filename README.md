@@ -10,4 +10,3 @@ Photocard trading for PLLI (PLAVE fans), PLAVE 5th mini album *Hyperdrive*. Mark
 
 It is a static site: `index.html` plus `config.js`. No build step.
 
-Card pictures are cropped from the fan-made checklist by @ppusyu_nyangi.
