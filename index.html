@@ -706,7 +706,7 @@ renderVerChips(); renderCountryChips(); renderChips(); renderAll();
 // ---- Supabase: login + shared list ----
 const sb = window.supabase && window.PLLI_CONFIG && window.PLLI_CONFIG.SUPABASE_URL ? window.supabase.createClient(window.PLLI_CONFIG.SUPABASE_URL, window.PLLI_CONFIG.SUPABASE_ANON_KEY) : null;
 async function startSession(session) {
-  if (!session) { state.canSave = false; state.uid = null; showBanner("Can't reach the database right now, so your picks stay in this browser. Reload to try again.", "warn"); return; }
+  if (!session) { state.canSave = false; state.uid = null; showBanner("Can't reach the database right now, so your picks stay in this browser. Reload to try again." + (window.__authErr ? " (Details: " + window.__authErr + ")" : ""), "warn"); return; }
   state.db = sb; state.uid = session.user.id; state.canSave = true;
   showBanner("No login needed. Your list is linked to this browser, so use the same phone or computer to edit it. Lists that aren't saved again for 7 days are cleared automatically.");
   const { data: mine } = await sb.from("traders").select("data").eq("id", state.uid).maybeSingle();
@@ -725,7 +725,9 @@ async function loadOthers() {
 (async () => {
   if (!sb) { showBanner("This copy is not connected to a database yet, so lists are kept in this browser only.", "warn"); setSaveState("Saved in this browser only"); return; }
   let { data: { session } } = await sb.auth.getSession();
-  if (!session) { const res = await sb.auth.signInAnonymously(); session = res.data && res.data.session; }
+  let authErr = "";
+  if (!session) { const res = await sb.auth.signInAnonymously(); session = res.data && res.data.session; if (res.error) authErr = res.error.message || String(res.error); }
+  window.__authErr = authErr;
   await startSession(session);
   await loadOthers();
   let t = null;
