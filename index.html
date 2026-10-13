@@ -184,11 +184,12 @@ h1 .spd { color: var(--accent); }
       <label for="nick">Your PLLI name
         <input type="text" id="nick" maxlength="40" placeholder="e.g. asterum_bamby" autocomplete="off">
       </label>
-      <label for="contact">How other PLLI can reach you
-        <input type="text" id="contact" maxlength="80" placeholder="e.g. X @yourhandle" autocomplete="off">
+      <label for="contact">Your X (Twitter) handle
+        <input type="text" id="contact" maxlength="80" placeholder="@yourhandle" autocomplete="off">
       </label>
     </div>
     <div class="save-row">
+      <button class="btn primary" id="saveBtn">Save my list</button>
       <span class="save-state" id="saveState">Not saved yet</span>
       <span class="muted" id="myCounts"></span>
     </div>
@@ -378,17 +379,17 @@ function proposeTrade(other, give, get) {
   state.me.offers[tid] = { to: other.id, give, get, status: "open", done: false, at: new Date().toISOString() };
   state.composing = null;
   if (other.example) setTimeout(() => { other.replies[tid] = { from: state.uid || "me", status: "accepted", done: false, at: new Date().toISOString() }; renderAll(); }, 1200);
-  renderAll(); queueSave(); showTab("trades");
+  renderAll(); autoSave(); showTab("trades");
 }
 
 function respond(t, status) {
   state.me.replies[t.tid] = { from: t.otherId, status, done: false, at: new Date().toISOString() };
-  renderAll(); queueSave();
+  renderAll(); autoSave();
 }
 function cancelTrade(t) {
   if (t.mine) state.me.offers[t.tid].status = "cancelled";
   else state.me.replies[t.tid] = { ...(state.me.replies[t.tid] || { from: t.otherId }), status: "cancelled", at: new Date().toISOString() };
-  renderAll(); queueSave();
+  renderAll(); autoSave();
 }
 function markReceived(t) {
   if (t.mine) state.me.offers[t.tid].done = true;
@@ -400,7 +401,7 @@ function markReceived(t) {
   }
   state.me.want = state.me.want.filter(id => !t.iGet.includes(id));
   if (t.example) { const o = personById(t.otherId); if (o) { if (t.mine) o.replies[t.tid].done = true; else o.offers[t.tid].done = true; } }
-  renderAll(); queueSave();
+  renderAll(); autoSave();
 }
 
 /* ---------- Binder ---------- */
@@ -639,12 +640,17 @@ function serializeMe() {
   const replies = Object.fromEntries(Object.entries(m.replies).filter(([, r]) => !ex.has(r.from)));
   return { nick: m.nick, contact: m.contact, have: m.have.slice(), qty: { ...m.qty }, want: m.want.slice(), offers, replies, updatedAt: new Date().toISOString() };
 }
+function autoSave() { if (state.canSave && state.me.nick && state.me.contact) { dirty = true; flush(); } else queueSave(); }
 function queueSave() {
   dirty = true;
   if (!state.canSave) { saveLocal(); return; }
-  setSaveState("Saving…");
-  clearTimeout(saveTimer); saveTimer = setTimeout(flush, 700);
+  setSaveState("Unsaved changes · press Save");
 }
+$("saveBtn").addEventListener("click", () => {
+  if (!state.me.nick || !state.me.contact) { setSaveState("Add your PLLI name and X handle first"); (state.me.nick ? $("contact") : $("nick")).focus(); return; }
+  if (!state.canSave) { setSaveState("Can't reach the database right now. Reload and try again."); return; }
+  dirty = true; setSaveState("Saving…"); flush();
+});
 async function flush() {
   if (saving) { saveTimer = setTimeout(flush, 400); return; }
   if (!dirty) return;
@@ -652,12 +658,12 @@ async function flush() {
   try {
     const { error } = await state.db.from("traders").upsert({ id: state.uid, data: serializeMe(), updated_at: new Date().toISOString() });
     if (error) throw error;
-    setSaveState(dirty ? "Saving…" : "Saved · other PLLI can see your list");
+    setSaveState(dirty ? "Unsaved changes · press Save" : "Saved · other PLLI can see your list for 7 days");
   } catch (e) {
     if (e && e.code === "42501") {
       state.canSave = false; saveLocal(); renderAll();
       showBanner("You can browse here, but your access level does not let you save a list. Your picks are kept in this browser only.", "warn");
-    } else { dirty = true; setSaveState("Could not save, retrying…"); saveTimer = setTimeout(flush, 2500); }
+    } else { dirty = true; setSaveState("Could not save. Check your connection and press Save again."); }
   } finally { saving = false; }
 }
 function saveLocal() {
@@ -694,26 +700,13 @@ renderVerChips(); renderCountryChips(); renderChips(); renderAll();
 
 // ---- Supabase: login + shared list ----
 const sb = window.supabase && window.PLLI_CONFIG && window.PLLI_CONFIG.SUPABASE_URL ? window.supabase.createClient(window.PLLI_CONFIG.SUPABASE_URL, window.PLLI_CONFIG.SUPABASE_ANON_KEY) : null;
-function loginBanner() {
-  const b = $("banner"); b.hidden = false; b.dataset.kind = ""; b.replaceChildren();
-  const inp = el("input", { type: "email", id: "loginEmail", placeholder: "you@example.com", autocomplete: "email", style: "font:inherit;padding:8px 10px;border-radius:8px;border:1px solid var(--line);background:var(--bg);color:var(--ink);min-width:0;flex:1" });
-  const msg = el("span", { class: "note" });
-  const btn = el("button", { class: "btn primary", onclick: async () => {
-    const email = inp.value.trim(); if (!email) { msg.textContent = "Enter your email first."; return; }
-    btn.disabled = true;
-    const { error } = await sb.auth.signInWithOtp({ email, options: { emailRedirectTo: location.origin + location.pathname } });
-    btn.disabled = false;
-    msg.textContent = error ? "Could not send the link: " + error.message : "Check your email and tap the login link.";
-  } }, "Send login link");
-  b.append(el("div", { class: "list", style: "gap:8px" }, el("span", {}, "Log in with your email to save your list and trade with other PLLI. Until then your picks stay in this browser."), el("div", { class: "actions" }, inp, btn), msg));
-}
 async function startSession(session) {
-  if (!session) { state.canSave = false; state.uid = null; loginBanner(); setSaveState("Saved in this browser only"); return; }
+  if (!session) { state.canSave = false; state.uid = null; showBanner("Can't reach the database right now, so your picks stay in this browser. Reload to try again.", "warn"); return; }
   state.db = sb; state.uid = session.user.id; state.canSave = true;
-  const b = $("banner"); b.replaceChildren(el("span", {}, "Logged in as " + (session.user.email || "PLLI") + " "), el("button", { class: "btn", onclick: () => sb.auth.signOut() }, "Log out")); b.dataset.kind = ""; b.hidden = false;
+  showBanner("No login needed. Your list is linked to this browser, so use the same phone or computer to edit it. Lists that aren't saved again for 7 days are cleared automatically.");
   const { data: mine } = await sb.from("traders").select("data").eq("id", state.uid).maybeSingle();
   if (mine && mine.data) { applyMe(mine.data); setSaveState("Saved · other PLLI can see your list"); }
-  else if (state.me.have.length || state.me.want.length || state.me.nick) queueSave();
+  else if (state.me.have.length || state.me.want.length || state.me.nick) setSaveState("Unsaved changes · press Save");
   else setSaveState("Mark cards below to start your list");
   renderAll();
 }
@@ -726,9 +719,9 @@ async function loadOthers() {
 }
 (async () => {
   if (!sb) { showBanner("This copy is not connected to a database yet, so lists are kept in this browser only.", "warn"); setSaveState("Saved in this browser only"); return; }
-  const { data: { session } } = await sb.auth.getSession();
+  let { data: { session } } = await sb.auth.getSession();
+  if (!session) { const res = await sb.auth.signInAnonymously(); session = res.data && res.data.session; }
   await startSession(session);
-  sb.auth.onAuthStateChange((ev, s) => { if (ev === "SIGNED_IN" || ev === "SIGNED_OUT") startSession(s).then(loadOthers); });
   await loadOthers();
   let t = null;
   sb.channel("traders").on("postgres_changes", { event: "*", schema: "public", table: "traders" }, () => { clearTimeout(t); t = setTimeout(loadOthers, 500); }).subscribe();

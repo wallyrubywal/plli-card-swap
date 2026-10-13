@@ -11,3 +11,7 @@ create policy "insert own list" on public.traders for insert with check (auth.ui
 create policy "update own list" on public.traders for update using (auth.uid() = id) with check (auth.uid() = id);
 create policy "delete own list" on public.traders for delete using (auth.uid() = id);
 alter publication supabase_realtime add table public.traders;
+
+-- Auto-clear: lists not saved for 7 days are deleted every night (needs the pg_cron extension).
+create extension if not exists pg_cron;
+select cron.schedule('clear-old-lists', '0 3 * * *', $$delete from public.traders where updated_at < now() - interval '7 days'$$);

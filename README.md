@@ -4,7 +4,7 @@ Photocard trading for PLLI (PLAVE fans), PLAVE 5th mini album *Hyperdrive*. Mark
 
 ## Setup
 1. Supabase: create a project, run `supabase/schema.sql` in the SQL Editor.
-2. Supabase → Authentication → URL Configuration: set Site URL to your site address (for example `https://<user>.github.io/plli-card-swap/`).
+2. Supabase → Authentication → Sign In / Providers: turn on "Allow anonymous sign-ins" (no login screen; each browser gets its own list). Then run `supabase/02-no-login.sql` for the 7-day auto-clear.
 3. Put the Project URL and anon key into `config.js`.
 4. GitHub → repo Settings → Pages → deploy from branch `main`, folder `/`.
 
