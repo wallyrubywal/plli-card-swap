@@ -2,7 +2,9 @@
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <script src="config.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.49.4/dist/umd/supabase.min.js"></script>
-<style>:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0;font:14px system-ui,sans-serif}img{max-width:100%}[hidden]{display:none!important}</style>
+<style>:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0;font:14px system-ui,sans-serif}img{max-width:100%}[hidden]{display:none!important}.mini .chipcard { padding: 4px 10px 4px 4px; gap: 8px; }
+.thumb { width: 34px; height: 52px; object-fit: cover; border-radius: 4px; display: inline-block; flex: none; }
+</style>
 </head><body>
 <title>PLLI Card Swap</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -491,7 +493,7 @@ function miniList(ids, owner) {
   return el("div", { class: "mini" }, ...ids.map(id => {
     const c = CARD[id]; if (!c) return null;
     const q = owner ? qtyOf(owner, id) : 0;
-    return el("span", {}, el("span", { class: "dot", style: `background:${c.member.color}` }), cardLabel(id) + (q > 1 ? ` ×${q}` : ""));
+    return el("span", { class: "chipcard" }, IMGS[id] ? el("img", { src: IMGS[id], alt: "", class: "thumb", loading: "lazy" }) : el("span", { class: "thumb", style: `background:${c.member.color}` }), cardLabel(id) + (q > 1 ? ` ×${q}` : ""));
   }));
 }
 
