@@ -821,9 +821,9 @@ async function startSession(session) {
   renderAll();
 }
 async function loadOthers() {
-  const { data, error } = await sb.from("traders").select("id,data").limit(5000);
+  const { data, error } = await sb.from("traders").select("id,data,updated_at").order("updated_at", { ascending: false }).limit(5000);
   if (error) { showBanner("Could not load other PLLI's lists. Reload to try again.", "warn"); return; }
-  state.others = data.filter(r => r.id !== state.uid).map(r => ({ id: r.id, ...normalize(r.data || {}) }))
+  state.others = data.filter(r => r.id !== state.uid).map(r => ({ id: r.id, ...normalize(r.data || {}) })) // newest saved first
     .filter(t => t.have.length || t.want.length || Object.keys(t.offers).length);
   renderAll();
 }
